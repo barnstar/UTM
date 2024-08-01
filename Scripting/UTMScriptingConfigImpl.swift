@@ -220,6 +220,7 @@ extension UTMScriptingConfigImpl {
         switch mode {
         case .shared: return .shared
         case .bridged: return .bridged
+        case .fileDevice: return .fileDevice
         }
     }
     
@@ -229,6 +230,7 @@ extension UTMScriptingConfigImpl {
             "mode": appleNetworkMode(from: config.mode).rawValue,
             "address": config.macAddress,
             "hostInterface": config.bridgeInterface ?? "",
+            "fileDevice": config.fileDevice ?? "",
         ]
     }
     
@@ -594,6 +596,9 @@ extension UTMScriptingConfigImpl {
         }
         if let interface = record["hostInterface"] as? String, !interface.isEmpty {
             network.bridgeInterface = interface
+        }
+        if let fileDevice = record["fileDevice"] as? String, !fileDevice.isEmpty {
+            network.fileDevice = fileDevice
         }
     }
     

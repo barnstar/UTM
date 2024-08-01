@@ -21,7 +21,8 @@ struct VMConfigAppleNetworkingView: View {
     @Binding var config: UTMAppleConfigurationNetwork
     @EnvironmentObject private var data: UTMData
     @State private var newMacAddress: String?
-    
+    @State private var newFileDevice: String?
+
     var body: some View {
         Form {
             VMConfigConstantPicker("Network Mode", selection: $config.mode)
@@ -50,9 +51,27 @@ struct VMConfigAppleNetworkingView: View {
                     }
                 }
             }
+            if config.mode == .fileDevice {
+                Section(header: Text("File Device Settings")) {
+                    TextField("File Device Path", text: $newFileDevice.bound, onCommit: {
+                        commitFileDevice()
+                    })
+                    .onAppear {
+                        newFileDevice = config.fileDevice
+                    }
+                }
+
+            }
         }
     }
-    
+
+    private func commitFileDevice() {
+        guard let fileDevice = newFileDevice else {
+            return
+        }
+        config.fileDevice = fileDevice
+    }
+
     private func commitMacAddress() {
         guard let macAddress = newMacAddress else {
             return

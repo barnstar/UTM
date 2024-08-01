@@ -23,11 +23,13 @@ struct UTMAppleConfigurationNetwork: Codable, Identifiable {
     enum NetworkMode: String, CaseIterable, QEMUConstant {
         case shared = "Shared"
         case bridged = "Bridged"
-        
+        case fileDevice = "FileDevice"
+
         var prettyValue: String {
             switch self {
             case .shared: return NSLocalizedString("Shared Network", comment: "UTMAppleConfigurationNetwork")
             case .bridged: return NSLocalizedString("Bridged (Advanced)", comment: "UTMAppleConfigurationNetwork")
+            case .fileDevice: return NSLocalizedString("File Device (Advanced)", comment: "UTMAppleConfigurationNetwork")
             }
         }
     }
@@ -39,13 +41,17 @@ struct UTMAppleConfigurationNetwork: Codable, Identifiable {
     
     /// In bridged mode this is the physical interface to bridge.
     var bridgeInterface: String?
-    
+
+    /// The UNIX file device path for our virtual network device
+    var fileDevice: String?
+
     let id = UUID()
     
     enum CodingKeys: String, CodingKey {
         case mode = "Mode"
         case macAddress = "MacAddress"
         case bridgeInterface = "BridgeInterface"
+        case fileDevice = "FileDeviceInterface"
     }
     
     init() {
@@ -56,7 +62,9 @@ struct UTMAppleConfigurationNetwork: Codable, Identifiable {
         mode = try values.decode(NetworkMode.self, forKey: .mode)
         macAddress = try values.decode(String.self, forKey: .macAddress)
         bridgeInterface = try values.decodeIfPresent(String.self, forKey: .bridgeInterface)
+        fileDevice = try values.decodeIfPresent(String.self, forKey: .fileDevice)
     }
+
     
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -64,6 +72,9 @@ struct UTMAppleConfigurationNetwork: Codable, Identifiable {
         try container.encode(macAddress, forKey: .macAddress)
         if mode == .bridged {
             try container.encodeIfPresent(bridgeInterface, forKey: .bridgeInterface)
+        }
+        if mode == .fileDevice {
+            try container.encodeIfPresent(fileDevice, forKey: .fileDevice)
         }
     }
     
@@ -77,7 +88,10 @@ struct UTMAppleConfigurationNetwork: Codable, Identifiable {
             bridgeInterface = attachment.interface.identifier
         } else if let _ = virtioConfig.attachment as? VZNATNetworkDeviceAttachment {
             mode = .shared
-        } else {
+        } else if let _ = virtioConfig.attachment as? VZFileHandleNetworkDeviceAttachment {
+            mode = .fileDevice
+        }
+        else {
             return nil
         }
     }
@@ -89,6 +103,36 @@ struct UTMAppleConfigurationNetwork: Codable, Identifiable {
         }
         config.macAddress = macAddress
         switch mode {
+        case .fileDevice:
+            guard let fileDevice else {
+                fatalError()
+            }
+
+            do {
+                let socket = Darwin.socket(AF_UNIX, SOCK_DGRAM, 0)
+
+                var address = sockaddr_un()
+                address.sun_family = sa_family_t(AF_UNIX)
+                fileDevice.withCString { ptr in
+                    withUnsafeMutablePointer(to: &address.sun_path.0) { dest in
+                        _ = strcpy(dest, ptr)
+                    }
+                }
+
+                let fd = Darwin.connect(socket,
+                                        withUnsafePointer(to: &address, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { $0 } }), 
+                                        socklen_t(MemoryLayout<sockaddr_un>.size))
+
+                if fd == -1 {
+                    print("Error binding virtual network device socket - \(String(cString: strerror(errno)))")
+                    return nil
+                }
+                print("Binding virtual network device to socket path: \(fileDevice)")
+
+                let handle = FileHandle(fileDescriptor: socket)
+                let device = VZFileHandleNetworkDeviceAttachment(fileHandle: handle)
+                config.attachment = device
+            }
         case .shared:
             let attachment = VZNATNetworkDeviceAttachment()
             config.attachment = attachment

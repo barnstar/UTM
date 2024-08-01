@@ -136,6 +136,7 @@ import ScriptingBridge
 @objc public enum UTMScriptingAppleNetworkMode : AEKeyword {
     case shared = 0x53685264 /* 'ShRd' */
     case bridged = 0x42724764 /* 'BrGd' */
+    case fileDevice = 0x46644E64 /* 'FdNd' */
 }
 
 // MARK: UTMScriptingGenericMethods
